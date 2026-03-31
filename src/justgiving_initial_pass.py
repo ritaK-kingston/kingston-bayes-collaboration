@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import importlib.util
 from pathlib import Path
@@ -17,10 +18,11 @@ import statsmodels.api as sm
 # =========================
 # SETTINGS ----
 # =========================
-DATA_PATH = Path("/Users/dkoch811/Documents/GitHub/Projects/Justgiving/crowdfunding.csv")
-PIPELINE_SCRIPT = Path("/Users/dkoch811/Documents/GitHub/Projects/Justgiving/motivation_ensemble_v2.py")
-OUTPUT_DIR = Path("/Users/dkoch811/Documents/GitHub/Projects/Justgiving/exploratory_outputs")
-SAMPLE_SIZE = None 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DATA_PATH = REPO_ROOT / "data" / "crowdfunding.csv"
+DEFAULT_PIPELINE_SCRIPT = REPO_ROOT / "src" / "motivation_ensemble_v2.py"
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs" / "exploratory_outputs"
+DEFAULT_SAMPLE_SIZE = None
 
 
 # =========================
@@ -434,11 +436,53 @@ def build_outcome_by_primary_category(
     return pd.concat(pieces, ignore_index=True)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run initial pass analysis from raw crowdfunding data."
+    )
+    parser.add_argument(
+        "--data-path",
+        type=Path,
+        default=DEFAULT_DATA_PATH,
+        help=f"Path to crowdfunding input file (.csv/.xlsx/.xls). Default: {DEFAULT_DATA_PATH}",
+    )
+    parser.add_argument(
+        "--pipeline-script",
+        type=Path,
+        default=DEFAULT_PIPELINE_SCRIPT,
+        help=f"Path to motivation_ensemble_v2.py. Default: {DEFAULT_PIPELINE_SCRIPT}",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help=f"Directory for output CSVs. Default: {DEFAULT_OUTPUT_DIR}",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=DEFAULT_SAMPLE_SIZE,
+        help="Optional sample size passed to classifier (None = full run).",
+    )
+    return parser.parse_args()
+
+
 def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    args = parse_args()
+    output_dir = args.output_dir
+    data_path = args.data_path
+    pipeline_script = args.pipeline_script
+    sample_size = args.sample_size
+
+    if not data_path.exists():
+        raise FileNotFoundError(f"Input data file not found: {data_path}")
+    if not pipeline_script.exists():
+        raise FileNotFoundError(f"Pipeline script not found: {pipeline_script}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print("\nSTEP 1: Read dataset")
-    raw = read_any_table(DATA_PATH)
+    raw = read_any_table(data_path)
     print(f"Rows: {len(raw):,}")
     print("Top-level columns:")
     print(raw.columns.tolist())
@@ -483,7 +527,7 @@ def main():
     df[target_col] = coerce_numeric(df[target_col])
 
     print("\nSTEP 3: Prepare unique story file for the original pipeline")
-    pipeline_module = import_pipeline_module(PIPELINE_SCRIPT)
+    pipeline_module = import_pipeline_module(pipeline_script)
     categories = list(pipeline_module.CATEGORIES)
 
     df_audit, preprocessing_audit = build_preprocessing_audit(
@@ -492,7 +536,7 @@ def main():
         preprocess_func=pipeline_module.preprocess_text,
     )
 
-    audit_path = OUTPUT_DIR / "00_preprocessing_audit.csv"
+    audit_path = output_dir / "00_preprocessing_audit.csv"
     preprocessing_audit.to_csv(audit_path, index=False)
 
     print("\nPreprocessing audit:")
@@ -512,7 +556,7 @@ def main():
         df_audit=df_audit,
         short_name_col=short_name_col,
     )
-    duplicate_examples_path = OUTPUT_DIR / "00b_duplicate_story_examples.csv"
+    duplicate_examples_path = output_dir / "00b_duplicate_story_examples.csv"
     duplicate_examples.to_csv(duplicate_examples_path, index=False)
     print(f"Saved duplicate story examples to: {duplicate_examples_path}")
 
@@ -522,7 +566,7 @@ def main():
         .reset_index(drop=True)
     )
 
-    input_path = OUTPUT_DIR / "01_classification_input.csv"
+    input_path = output_dir / "01_classification_input.csv"
     classification_input.to_csv(input_path, index=False)
     print(f"Unique stories sent to classifier: {len(classification_input):,}")
     print(f"Saved input file to: {input_path}")
@@ -532,11 +576,11 @@ def main():
         csv_path=str(input_path),
         story_col="story",
         id_col="story_key",
-        sample_size=SAMPLE_SIZE,
-        output_dir=str(OUTPUT_DIR),
+        sample_size=sample_size,
+        output_dir=str(output_dir),
     )
 
-    classifications_path = OUTPUT_DIR / "02_classifications_clean.csv"
+    classifications_path = output_dir / "02_classifications_clean.csv"
     classifications.to_csv(classifications_path, index=False)
     print(f"Saved classifications to: {classifications_path}")
 
@@ -546,10 +590,10 @@ def main():
         categories=categories,
     )
 
-    primary_counts_path = OUTPUT_DIR / "02b_primary_category_counts.csv"
-    active_prevalence_path = OUTPUT_DIR / "02c_active_label_prevalence.csv"
-    num_categories_path = OUTPUT_DIR / "02d_num_categories_distribution.csv"
-    profile_weights_path = OUTPUT_DIR / "02e_mean_profile_weights.csv"
+    primary_counts_path = output_dir / "02b_primary_category_counts.csv"
+    active_prevalence_path = output_dir / "02c_active_label_prevalence.csv"
+    num_categories_path = output_dir / "02d_num_categories_distribution.csv"
+    profile_weights_path = output_dir / "02e_mean_profile_weights.csv"
 
     descriptives["primary_category_counts"].to_csv(primary_counts_path, index=False)
     descriptives["active_label_prevalence"].to_csv(active_prevalence_path, index=False)
@@ -576,7 +620,7 @@ def main():
         np.nan,
     )
 
-    merged_path = OUTPUT_DIR / "03_merged_with_outcomes.csv"
+    merged_path = output_dir / "03_merged_with_outcomes.csv"
     merged.to_csv(merged_path, index=False)
     print(f"Saved merged data to: {merged_path}")
 
@@ -594,9 +638,9 @@ def main():
         classifications=classifications,
         merged=merged,
         outcomes=outcomes,
-        sample_size=SAMPLE_SIZE,
+        sample_size=sample_size,
     )
-    coverage_path = OUTPUT_DIR / "03b_classification_coverage.csv"
+    coverage_path = output_dir / "03b_classification_coverage.csv"
     coverage_table.to_csv(coverage_path, index=False)
     print(f"Saved coverage table to: {coverage_path}")
 
@@ -604,7 +648,7 @@ def main():
         merged=merged,
         outcomes=outcomes,
     )
-    outcome_overall_path = OUTPUT_DIR / "03c_outcome_descriptives_overall.csv"
+    outcome_overall_path = output_dir / "03c_outcome_descriptives_overall.csv"
     outcome_overall.to_csv(outcome_overall_path, index=False)
     print(f"Saved overall outcome descriptives to: {outcome_overall_path}")
 
@@ -612,7 +656,7 @@ def main():
         merged=merged,
         outcomes=outcomes,
     )
-    outcome_by_primary_path = OUTPUT_DIR / "03d_outcome_by_primary_category.csv"
+    outcome_by_primary_path = output_dir / "03d_outcome_by_primary_category.csv"
     outcome_by_primary.to_csv(outcome_by_primary_path, index=False)
     print(f"Saved outcome descriptives by primary category to: {outcome_by_primary_path}")
 
@@ -637,7 +681,7 @@ def main():
     )
     reg_results = reg_results.sort_values(["outcome", "p", "motivation"]).reset_index(drop=True)
 
-    reg_path = OUTPUT_DIR / "04_regression_results.csv"
+    reg_path = output_dir / "04_regression_results.csv"
     reg_results.to_csv(reg_path, index=False)
     print(f"Saved regression results to: {reg_path}")
 
@@ -658,7 +702,7 @@ def main():
         .rename_axis(None, axis=1)
     )
 
-    summary_path = OUTPUT_DIR / "05_summary_table.csv"
+    summary_path = output_dir / "05_summary_table.csv"
     summary_table.to_csv(summary_path, index=False)
     print(f"Saved summary table to: {summary_path}")
 

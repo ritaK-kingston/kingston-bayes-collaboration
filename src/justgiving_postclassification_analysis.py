@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from itertools import combinations
@@ -18,13 +19,8 @@ from scipy import stats
 # =========================
 # SETTINGS ----
 # =========================
-OUTPUT_DIR = Path("/Users/dkoch811/Documents/GitHub/Projects/Justgiving/exploratory_outputs")
-
-CLASSIFICATIONS_PATH = OUTPUT_DIR / "02_classifications_clean.csv"
-MERGED_PATH = OUTPUT_DIR / "03_merged_with_outcomes.csv"
-
-ANALYSIS_DIR = OUTPUT_DIR / "postclassification_analysis"
-ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs" / "exploratory_outputs"
 
 
 # =========================
@@ -362,10 +358,35 @@ def build_summary_table(reg_results: pd.DataFrame) -> pd.DataFrame:
     return summary_table
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run post-classification analysis on first-pass outputs."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help=f"Directory containing 02_classifications_clean.csv and 03_merged_with_outcomes.csv. Default: {DEFAULT_OUTPUT_DIR}",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    output_dir = args.output_dir
+    classifications_path = output_dir / "02_classifications_clean.csv"
+    merged_path = output_dir / "03_merged_with_outcomes.csv"
+    analysis_dir = output_dir / "postclassification_analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+
+    if not classifications_path.exists():
+        raise FileNotFoundError(f"Missing classifications file: {classifications_path}")
+    if not merged_path.exists():
+        raise FileNotFoundError(f"Missing merged outcomes file: {merged_path}")
+
     print("Reading classified files...")
-    classifications = pd.read_csv(CLASSIFICATIONS_PATH)
-    merged = pd.read_csv(MERGED_PATH)
+    classifications = pd.read_csv(classifications_path)
+    merged = pd.read_csv(merged_path)
 
     print(f"Classified unique stories: {len(classifications):,}")
     print(f"Merged rows: {len(merged):,}")
@@ -379,10 +400,10 @@ def main():
     print("\n1) Classification descriptives")
     descriptives = build_classification_descriptives(classifications)
 
-    primary_counts_path = ANALYSIS_DIR / "a01_primary_category_counts.csv"
-    active_prevalence_path = ANALYSIS_DIR / "a02_active_label_prevalence.csv"
-    num_categories_path = ANALYSIS_DIR / "a03_num_categories_distribution.csv"
-    profile_weights_path = ANALYSIS_DIR / "a04_mean_profile_weights.csv"
+    primary_counts_path = analysis_dir / "a01_primary_category_counts.csv"
+    active_prevalence_path = analysis_dir / "a02_active_label_prevalence.csv"
+    num_categories_path = analysis_dir / "a03_num_categories_distribution.csv"
+    profile_weights_path = analysis_dir / "a04_mean_profile_weights.csv"
 
     descriptives["primary_category_counts"].to_csv(primary_counts_path, index=False)
     descriptives["active_label_prevalence"].to_csv(active_prevalence_path, index=False)
@@ -395,30 +416,30 @@ def main():
     overall_outcomes = build_overall_outcome_descriptives(merged, outcomes)
     by_primary = build_outcome_by_primary_category(merged, outcomes)
 
-    overall_outcomes_path = ANALYSIS_DIR / "a05_outcome_descriptives_overall.csv"
-    by_primary_path = ANALYSIS_DIR / "a06_outcome_by_primary_category.csv"
+    overall_outcomes_path = analysis_dir / "a05_outcome_descriptives_overall.csv"
+    by_primary_path = analysis_dir / "a06_outcome_by_primary_category.csv"
 
     overall_outcomes.to_csv(overall_outcomes_path, index=False)
     by_primary.to_csv(by_primary_path, index=False)
 
     print("\n3) Profile regressions")
     reg_results = rerun_profile_regressions(merged, outcomes)
-    reg_results_path = ANALYSIS_DIR / "a07_regression_results.csv"
+    reg_results_path = analysis_dir / "a07_regression_results.csv"
     reg_results.to_csv(reg_results_path, index=False)
 
     print("\n4) Percent-change interpretation table")
     pct_change = build_percent_change_table(reg_results)
-    pct_change_path = ANALYSIS_DIR / "a08_percent_change_interpretation.csv"
+    pct_change_path = analysis_dir / "a08_percent_change_interpretation.csv"
     pct_change.to_csv(pct_change_path, index=False)
 
     print("\n5) Pairwise comparisons between primary categories")
     pairwise = build_pairwise_primary_category_tests(merged, outcomes, min_n_per_group=20)
-    pairwise_path = ANALYSIS_DIR / "a09_pairwise_primary_category_tests.csv"
+    pairwise_path = analysis_dir / "a09_pairwise_primary_category_tests.csv"
     pairwise.to_csv(pairwise_path, index=False)
 
     print("\n6) Compact summary table")
     summary_table = build_summary_table(reg_results)
-    summary_path = ANALYSIS_DIR / "a10_summary_table.csv"
+    summary_path = analysis_dir / "a10_summary_table.csv"
     summary_table.to_csv(summary_path, index=False)
 
     print("\nDone.")

@@ -43,13 +43,14 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 pip install --upgrade pip
-pip install pandas numpy scipy matplotlib seaborn scikit-learn transformers torch
+pip install pandas numpy scipy statsmodels matplotlib seaborn scikit-learn transformers torch
 ```
 
 These are the main libraries used in the original study:
 
 - `transformers`, `torch` – Hugging Face models (BART, DistilRoBERTa, Twitter-RoBERTa)
 - `pandas`, `numpy` – data handling and numeric computation
+- `statsmodels`, `scipy` – regression and statistical tests
 
 You do **not** need a GPU, but for large datasets a GPU or Apple Silicon (MPS)
 will substantially reduce runtime.
@@ -271,4 +272,33 @@ validation, plotting, and substantive analysis.
 If you need additional components (e.g. the PostgreSQL collection scripts,
 validation plots, or donor-level analytics), they can be added here as
 additional modules making use of this core ensemble implementation.
+
+---
+
+### 8. Exploratory Analysis Scripts (Collaborator Additions)
+
+The repository also includes two complementary scripts:
+
+- `src/justgiving_initial_pass.py`
+- `src/justgiving_postclassification_analysis.py`
+
+Both scripts now use CLI arguments instead of machine-specific paths.
+
+Run initial pass:
+
+```bash
+python src/justgiving_initial_pass.py \
+  --data-path data/crowdfunding.csv \
+  --pipeline-script src/motivation_ensemble_v2.py \
+  --output-dir outputs/exploratory_outputs
+```
+
+Run post-classification analysis:
+
+```bash
+python src/justgiving_postclassification_analysis.py \
+  --output-dir outputs/exploratory_outputs
+```
+
+Use `--help` on either script to see all options.
 
